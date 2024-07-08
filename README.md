@@ -1,2 +1,2 @@
 # Aerial Diffusion Reimplementation
- Repository to store the code for the Aerial Diffusion Reimplementation. Final project of the Computer Vision class at Sapienza Università di Roma for the Artificial Intelligence and Robotics course accademic year 2023/2024
+ Repository to store the code for the Aerial Diffusion Reimplementation. Final project of the Computer Vision class at Sapienza Università di Roma for the Artificial Intelligence and Robotics course accademic year 2023/2024. Aim of the project is to re-implement the 'Aerial Diffusion: Text Guided Ground-to-Aerial View Translation from a Single Image using Diffusion Model' paper found at the link: https://arxiv.org/pdf/2303.11444.
