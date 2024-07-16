@@ -10,6 +10,8 @@ from diffusers.schedulers import DDIMScheduler, LMSDiscreteScheduler, PNDMSchedu
 from transformers import CLIPFeatureExtractor, CLIPTextModel, CLIPTokenizer
 from typing import Union, Optional
 from tqdm.auto import tqdm
+from matplotlib import pyplot as plt
+
 
 class AerialStableDiffusionPipeline(DiffusionPipeline):
     def __init__(
@@ -93,11 +95,12 @@ class AerialStableDiffusionPipeline(DiffusionPipeline):
         self.image_latents = image_latents
 
         progress_bar = tqdm(range(text_embedding_optimization_steps))
-        progress_bar.set_description("Steps")
+        progress_bar.set_description("Steps")    
 
-        for _ in range(text_embedding_optimization_steps):
+        training_loss_text = [] 
+
+        for i in progress_bar:
             # Sample noise that we'll add to the latents
-            print(_)
             noise = torch.randn(image_latents.shape).to(image_latents.device)
             timesteps = torch.randint(1000, (1,), device=image_latents.device)
 
@@ -110,12 +113,16 @@ class AerialStableDiffusionPipeline(DiffusionPipeline):
 
             loss = F.mse_loss(noise_pred, noise, reduction="none").mean([1, 2, 3]).mean()
             loss.backward()
+            training_loss_text.append(loss.detach().cpu().numpy())
             optimizer.step()
             optimizer.zero_grad()
         
-            progress_bar.set_postfix(loss)
-            
         text_embeddings.requires_grad_(False)
+
+        plt.plot(training_loss_text, label='train_loss_text')
+        plt.legend()
+        plt.savefig("./figs/train_loss_text.png")
+        print("Saved in ./figs/train_loss_text.png")
 
         # Now we fine tune the unet to better reconstruct the image
         self.unet.requires_grad_(True)
@@ -124,8 +131,13 @@ class AerialStableDiffusionPipeline(DiffusionPipeline):
             self.unet.parameters(),  # only optimize unet
             lr=diffusion_model_learning_rate,
         )
+
+        progress_bar = tqdm(range(model_fine_tuning_optimization_steps))
+        progress_bar.set_description("Steps")
+
+        training_loss_image = []
     
-        for _ in range(model_fine_tuning_optimization_steps):
+        for i in progress_bar:
                 torch.cuda.empty_cache()
                 # Sample noise that we'll add to the latents
                 noise = torch.randn(image_latents.shape).to(image_latents.device)
@@ -141,18 +153,25 @@ class AerialStableDiffusionPipeline(DiffusionPipeline):
                 loss = F.mse_loss(noise_pred, noise, reduction="none").mean([1, 2, 3]).mean()
                 torch.cuda.empty_cache()
                 loss.backward()
+                training_loss_image.append(loss.detach().cpu().numpy())
+
                 optimizer.step()
                 optimizer.zero_grad()
+        
+        plt.plot(training_loss_image, label='train_loss_image')
+        plt.legend()
+        plt.savefig("./figs/train_loss_image.png")
+        print("Saved in ./figs/train_loss_image.png")
 
         self.text_embeddings_orig = text_embeddings_orig
         self.text_embeddings = text_embeddings
 
 if __name__ == '__main__':
-    d_loader = create_dataloader(16)
+    d_loader = create_dataloader(2)
     pipe = DiffusionPipeline.from_pretrained(
         "CompVis/stable-diffusion-v1-4",
         custom_pipeline='./model.py', cache_dir = 'dir_name',
         scheduler = DDIMScheduler(beta_start=0.00085, beta_end=0.012, beta_schedule="scaled_linear", clip_sample=False, set_alpha_to_one=False)
-    )
+    ).to("cuda")
     for batch in d_loader:
-        pipe.train(batch)
+        pipe.train(batch, text_embedding_optimization_steps= 1, model_fine_tuning_optimization_steps = 1)
